@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>How the Breathing Rate Monitor Works</title>
+<style>
+  :root {
+    --bg: #0f1216; --panel: #171c23; --panel-2: #1f2630; --line: #2a333f;
+    --text: #e8edf3; --muted: #9aa7b5; --accent: #5cc8ff; --accent-dim: #2b7fb0;
+    --good: #58d68d; --warn: #f5b041; --bad: #ec7063;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); }
+  body { max-width: 760px; margin: 0 auto; padding: 24px 18px 80px; line-height: 1.6; }
+  a { color: var(--accent); }
+  h1 { font-size: 1.7rem; letter-spacing: -0.02em; margin: 6px 0 4px; }
+  h2 { font-size: 1.3rem; margin: 40px 0 6px; letter-spacing: -0.01em; }
+  h2 .step { color: var(--accent-dim); font-variant-numeric: tabular-nums; margin-right: 8px; }
+  h3 { font-size: 1.02rem; margin: 22px 0 4px; color: var(--accent); }
+  p { margin: 10px 0; }
+  .lede { color: var(--muted); font-size: 1.05rem; }
+  .muted { color: var(--muted); }
+  .term { color: var(--text); font-weight: 600; border-bottom: 1px dotted var(--accent-dim); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin: 16px 0; }
+  .demo { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 14px 16px; margin: 18px 0; }
+  .demo h4 { margin: 0 0 4px; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .analogy { background: #15211b; border-color: #27422f; }
+  .analogy b { color: var(--good); }
+  .note { background: var(--panel-2); border-left: 3px solid var(--accent-dim); padding: 10px 14px; border-radius: 8px; margin: 14px 0; font-size: 0.95rem; }
+  .tryit { background: rgba(92,200,255,.08); border: 1px dashed var(--accent-dim); border-radius: 10px; padding: 9px 12px; margin: 12px 0 0; font-size: 0.9rem; }
+  .tryit b { color: var(--accent); }
+  .toggles { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px; }
+  .toggles label { display: inline-flex; align-items: center; gap: 7px; font-size: 0.9rem; color: var(--text); cursor: pointer; }
+  .toggles input { width: 18px; height: 18px; accent-color: var(--accent); }
+  .disclaimer { background: #2a1b12; border-color: #5a3a1f; color: #ffcf9e; font-size: 0.9rem; }
+  .disclaimer strong { color: #ffb366; }
+  canvas { width: 100%; display: block; background: var(--panel-2); border-radius: 10px; touch-action: none; }
+  .controls { margin-top: 12px; display: grid; gap: 12px; }
+  .ctrl { display: grid; grid-template-columns: 130px 1fr 72px; align-items: center; gap: 10px; font-size: 0.9rem; }
+  .ctrl label { color: var(--muted); }
+  .ctrl output { font-family: var(--mono); color: var(--accent); text-align: right; font-size: 0.86rem; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .readout { margin-top: 12px; font-family: var(--mono); font-size: 0.92rem; background: var(--panel-2); border-radius: 8px; padding: 10px 12px; }
+  .readout b { color: var(--accent); }
+  .big { font-size: 1.15rem; }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; }
+  .pill.high { background: rgba(88,214,141,.16); color: var(--good); }
+  .pill.medium { background: rgba(245,176,65,.16); color: var(--warn); }
+  .pill.low { background: rgba(236,112,99,.16); color: var(--bad); }
+  .toc { font-size: 0.95rem; }
+  .toc a { display: block; padding: 3px 0; }
+  code { font-family: var(--mono); background: var(--panel-2); padding: 1px 5px; border-radius: 5px; font-size: 0.88em; }
+  .eq { font-family: var(--mono); background: var(--panel-2); padding: 10px 14px; border-radius: 8px; text-align: center; margin: 12px 0; color: var(--text); overflow-x: auto; }
+  .steps { display: grid; gap: 8px; margin: 14px 0; }
+  .steps .s { background: var(--panel-2); border-radius: 8px; padding: 10px 12px; font-size: 0.92rem; }
+  .steps .s b { color: var(--accent); }
+  .backlink { display: inline-block; margin-top: 10px; font-weight: 600; }
+  hr { border: none; border-top: 1px solid var(--line); margin: 36px 0; }
+  footer { color: var(--muted); font-size: 0.8rem; text-align: center; margin-top: 50px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 0.8rem; color: var(--muted); margin-top: 8px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+</style>
+</head>
+<body>
+
+<p class="muted" style="font-size:0.85rem"><a href="../resp-rate/">← Back to the Breathing Rate Monitor</a></p>
+
+<h1>How the Breathing Rate Monitor Works</h1>
+<p class="lede">A from-scratch guide to the signal processing behind the monitor — no background needed.
+We'll build up every idea with plain words, everyday analogies, and little interactive toys you can
+play with, until you can see exactly how the app turns your phone's wobble into a breaths-per-minute number.</p>
+
+<div class="card">
+  <strong>How to read this page.</strong> Go top to bottom. Each section introduces one idea, gives you a
+  picture to play with, then connects it back to the real pipeline. Drag the sliders — the point is to
+  <em>feel</em> what each concept does. Nothing here is stored or sent anywhere; it all runs in your browser.
+</div>
+
+<div class="card toc">
+  <strong>What we'll cover</strong>
+  <a href="#signal">1 · What is a signal?</a>
+  <a href="#frequency">2 · Frequency, period, and hertz</a>
+  <a href="#sampling">3 · Sampling: turning a wiggle into numbers</a>
+  <a href="#filtering">4 · Why we filter, and "detrending"</a>
+  <a href="#build">5 · Signals are made of simpler waves</a>
+  <a href="#fourier">6 · The Fourier transform &amp; the frequency spectrum</a>
+  <a href="#window">7 · The window: being gentle at the edges</a>
+  <a href="#peak">8 · Finding the peak precisely</a>
+  <a href="#autocorr">9 · Autocorrelation: a second opinion</a>
+  <a href="#confidence">10 · Confidence: when to trust the number</a>
+  <a href="#pipeline">11 · The whole pipeline, end to end</a>
+</div>
+
+<hr />
+
+<!-- 1. SIGNAL -->
+<h2 id="signal"><span class="step">1</span>What is a signal?</h2>
+<p>A <span class="term">signal</span> is just a measurement that changes over time. If you wrote down a
+number every fraction of a second, a signal is the list of those numbers — or, more usefully, the
+<em>shape</em> they trace when you plot them with time running left to right.</p>
+
+<div class="demo analogy">
+  <p style="margin:0"><b>Analogy.</b> Think of a cork bobbing on the sea. Its height goes up and down as
+  waves pass. If you filmed the cork and plotted its height over time, that wavy line <b>is</b> a signal.
+  Your voice is a signal (air pressure over time). A heartbeat on a hospital monitor is a signal.</p>
+</div>
+
+<p><b>Our signal.</b> When the phone lies on the child's chest, each breath gently tilts it. The phone's
+accelerometer always feels gravity pulling "down," and as the phone tilts, that downward pull gets
+shared differently across its three axes. So as he breathes, the gravity reading on each axis rises and
+falls a tiny bit. <em>That</em> rising-and-falling is the signal we care about. Everything below is about
+pulling a clean "breaths per minute" out of that faint wobble.</p>
+
+<!-- 2. FREQUENCY -->
+<h2 id="frequency"><span class="step">2</span>Frequency, period, and hertz</h2>
+<p>A wave that repeats has two numbers that describe its rhythm:</p>
+<ul>
+  <li><span class="term">Period</span> — how long one full cycle takes (one up-and-down), measured in seconds.</li>
+  <li><span class="term">Frequency</span> — how many full cycles happen per second. Its unit is the
+  <span class="term">hertz</span> (Hz). <b>1 Hz means "one cycle every second."</b></li>
+</ul>
+<p>They're two sides of the same coin: <code>frequency = 1 ÷ period</code>. A slow wave (long period) has a
+low frequency; a fast wave (short period) has a high frequency.</p>
+<p>Breathing is slow, so its frequency is a small number. One breath every 2 seconds is
+<code>1 ÷ 2 = 0.5 Hz</code>. Because people say "breaths per <em>minute</em>," and a minute is 60 seconds,
+we just multiply: <b>breaths-per-minute = frequency in Hz × 60.</b> So 0.5 Hz = 30 breaths/min.</p>
+
+<div class="demo">
+  <h4>Play: one sine wave</h4>
+  <canvas id="c_sine" height="200"></canvas>
+  <div class="controls">
+    <div class="ctrl"><label>Frequency</label><input id="sine_f" type="range" min="0.1" max="1.0" step="0.01" value="0.5"><output id="sine_f_o"></output></div>
+    <div class="ctrl"><label>Amplitude</label><input id="sine_a" type="range" min="0.2" max="1" step="0.01" value="0.7"><output id="sine_a_o"></output></div>
+  </div>
+  <div class="readout" id="sine_r"></div>
+  <p class="muted" style="font-size:0.86rem;margin-bottom:0">The highlighted stretch marks one full period.
+  <span class="term">Amplitude</span> is just how tall the wave is — how big the wobble is. It doesn't change
+  the rhythm (the bpm); it only changes how strong the signal is, which matters later for confidence.</p>
+  <p class="tryit"><b>Try this →</b> drag Frequency to the right. <b>Notice that</b> the wave bunches up (shorter
+  period) and the bpm climbs. Now drag Amplitude: the wave gets taller but the bpm doesn't budge — speed and
+  strength are two separate things.</p>
+</div>
+
+<!-- 3. SAMPLING -->
+<h2 id="sampling"><span class="step">3</span>Sampling: turning a wiggle into numbers</h2>
+<p>A phone can't record a smooth continuous curve — it takes a reading, then another, then another, many
+times a second. Each reading is a <span class="term">sample</span>. How often it reads is the
+<span class="term">sampling rate</span>, also in hertz. A 50 Hz sampling rate means 50 readings per second.</p>
+
+<div class="demo analogy">
+  <p style="margin:0"><b>Analogy.</b> It's like a strobe light flashing on a spinning wheel, or the frames of a
+  movie. Reality is continuous, but you only get snapshots. Enough snapshots and your eye fills in smooth
+  motion. <b>Too few, and things look wrong</b> — think of how wagon wheels in old films seem to spin
+  backwards. That illusion has a name in signal processing: <span class="term">aliasing</span>.</p>
+</div>
+
+<p>The rule of thumb: to capture a wave faithfully, you need to sample noticeably faster than the wave
+itself wiggles — at the very least twice per cycle, and comfortably more in practice. Breathing is slow
+(under 1 Hz), and phones sample motion dozens of times a second, so we have samples to spare. Drag the
+sampling rate below to see what happens when you don't.</p>
+
+<div class="demo">
+  <h4>Play: sampling a wave</h4>
+  <canvas id="c_samp" height="200"></canvas>
+  <div class="controls">
+    <div class="ctrl"><label>Sampling rate</label><input id="samp_fs" type="range" min="0.6" max="20" step="0.1" value="12"><output id="samp_fs_o"></output></div>
+  </div>
+  <div class="legend">
+    <span><i class="swatch" style="background:#3a4452"></i> true wave (0.5&nbsp;Hz)</span>
+    <span><i class="swatch" style="background:var(--accent)"></i> samples</span>
+    <span><i class="swatch" style="background:var(--warn)"></i> what the samples look like</span>
+  </div>
+  <div class="readout" id="samp_r"></div>
+  <p class="tryit"><b>Try this →</b> drag the sampling rate all the way down to about 1 Hz. <b>Notice that</b> the
+  yellow "what the samples see" line turns into a slow, lazy wave that looks nothing like the real 0.5 Hz
+  wave underneath — a fake rhythm conjured out of too-few snapshots. That's aliasing. Now drag it back up and
+  watch the yellow line snap back onto the true wave.</p>
+</div>
+<p class="muted" style="font-size:0.9rem">The phone's samples don't arrive perfectly evenly spaced, so the
+first thing our pipeline does is <b>resample</b>: use straight-line interpolation to lay the data onto a
+tidy, evenly-spaced grid. That just makes every later step simpler and more reliable.</p>
+
+<!-- 4. FILTERING -->
+<h2 id="filtering"><span class="step">4</span>Why we filter, and "detrending"</h2>
+<p>The breathing wobble never shows up alone. Riding along with it are things we don't want:</p>
+<ul>
+  <li>A slow <span class="term">drift</span> — the phone settling, a slow lean, temperature effects. This is
+  an even <em>lower</em> frequency than breathing.</li>
+  <li>Fast <span class="term">noise</span> — jitter, tiny bumps, electrical hiss. Much <em>higher</em>
+  frequency than breathing.</li>
+</ul>
+<p><span class="term">Filtering</span> means keeping the frequencies we care about and suppressing the rest.
+We know breathing lives in a specific band — roughly <b>0.1 Hz to 1.0 Hz</b> (that's 6 to 60 breaths per
+minute). Anything far below or above that band is almost certainly not breathing.</p>
+
+<div class="demo analogy">
+  <p style="margin:0"><b>Analogy.</b> It's the bass and treble knobs on a stereo. "Filtering" is just turning
+  down the frequencies you don't want and leaving up the ones you do. We turn down the very-slow drift and
+  the very-fast jitter, and keep the breathing-speed band in the middle.</p>
+</div>
+
+<p>The simplest, most important filter we apply is <span class="term">detrending</span>: we fit a straight
+line through the data and subtract it. That line captures the overall offset and slow drift, so removing it
+re-centers the wobble around zero and flattens out the slow lean.</p>
+
+<div class="demo">
+  <h4>Play: clean up a messy signal</h4>
+  <canvas id="c_filt" height="230"></canvas>
+  <div class="controls">
+    <div class="ctrl"><label>Slow drift</label><input id="fl_drift" type="range" min="0" max="2" step="0.01" value="1.1"><output id="fl_drift_o"></output></div>
+    <div class="ctrl"><label>Noise</label><input id="fl_noise" type="range" min="0" max="1.5" step="0.01" value="0.5"><output id="fl_noise_o"></output></div>
+  </div>
+  <div class="toggles">
+    <label><input type="checkbox" id="fl_detrend" checked> Remove drift (detrend)</label>
+    <label><input type="checkbox" id="fl_band" checked> Keep only the breathing band</label>
+  </div>
+  <div class="readout" id="filt_r"></div>
+  <div class="legend">
+    <span><i class="swatch" style="background:var(--muted)"></i> raw (drift + noise + breathing)</span>
+    <span><i class="swatch" style="background:var(--accent)"></i> after your filters</span>
+  </div>
+  <p class="tryit"><b>Try this →</b> crank up Drift and Noise until the grey raw line is a mess, then toggle the
+  two filters on and off. <b>Notice that</b> with both on, the blue line settles back into a clean breathing
+  wave and the recovered bpm locks onto 30 — the breathing was in there the whole time; filtering just
+  uncovers it.</p>
+</div>
+
+<!-- 5. BUILD -->
+<h2 id="build"><span class="step">5</span>Signals are made of simpler waves</h2>
+<p>Here's the single most important idea on this page: <b>any wiggly signal, no matter how messy, can be
+built by adding up plain sine waves of different frequencies.</b> A tall slow one, a small fast one, a
+medium one — stack enough together and you can recreate any shape.</p>
+
+<div class="demo analogy">
+  <p style="margin:0"><b>Analogy.</b> A musical chord. Press three piano keys and you hear one combined sound —
+  but it's really three pure notes (three frequencies) added together in the air. Your ear can pick them
+  apart. What we're about to do is give the <b>computer</b> that same ability.</p>
+</div>
+
+<p>Play with the ingredients below: a breathing wave, a slow drift, and random noise. Watch how the single
+messy line at the bottom is just the three stacked on top of each other — exactly the kind of signal the
+phone actually records.</p>
+
+<div class="demo">
+  <h4>Play: build a signal from parts</h4>
+  <canvas id="c_build" height="300"></canvas>
+  <div class="controls">
+    <div class="ctrl"><label>Breathing (bpm)</label><input id="b_bpm" type="range" min="10" max="60" step="1" value="30"><output id="b_bpm_o"></output></div>
+    <div class="ctrl"><label>Slow drift</label><input id="b_drift" type="range" min="0" max="1" step="0.01" value="0.4"><output id="b_drift_o"></output></div>
+    <div class="ctrl"><label>Noise</label><input id="b_noise" type="range" min="0" max="1" step="0.01" value="0.15"><output id="b_noise_o"></output></div>
+  </div>
+  <p class="muted" style="font-size:0.86rem;margin-bottom:0">Top three rows are the pure ingredients; the
+  bottom row is their sum — the realistic, messy signal. Next we'll pull the ingredients back out of that sum.</p>
+  <p class="tryit"><b>Try this →</b> start with Drift and Noise at zero — the sum is a clean breathing wave.
+  Now slowly add Drift, then Noise. <b>Notice that</b> the bottom line stops looking like breathing at all,
+  yet it's still just the three rows above added together. The breathing didn't leave; it got buried.</p>
+</div>
+
+<!-- 6. FOURIER -->
+<h2 id="fourier"><span class="step">6</span>The Fourier transform &amp; the frequency spectrum</h2>
+<p>If every signal is a sum of sine waves, the natural question is: <b>given a messy signal, which sine
+waves is it made of, and how strong is each one?</b> The tool that answers this is the
+<span class="term">Fourier transform</span>. Think of it as a machine: you feed in a signal measured over
+time, and it hands back a list of <em>how much of each frequency is present</em>.</p>
+
+<div class="demo analogy">
+  <p style="margin:0"><b>Analogy.</b> A glass prism. White light goes in; a rainbow comes out, because the
+  prism splits the light into its component colors. The Fourier transform is a prism for signals: a messy
+  wiggle goes in, and out comes its "rainbow" — the breakdown of which rhythms (frequencies) it contains,
+  and how strong each is.</p>
+</div>
+
+<p>That rainbow has a name: the <span class="term">frequency spectrum</span>. We plot it with frequency
+running left (slow) to right (fast), and height showing how much of that frequency is in the signal. A pure
+sine wave shows up as a single tall spike. Our breathing signal shows up as a spike parked right at the
+breathing frequency — <b>and finding that spike is how the app gets the bpm.</b></p>
+
+<p>The <span class="term">FFT</span> (Fast Fourier Transform) is just a clever, fast recipe for computing
+this. It's the exact same idea; "fast" only refers to doing it efficiently. The app uses an FFT because
+phones are not supercomputers and we want an answer every few seconds.</p>
+
+<div class="demo">
+  <h4>Play: messy signal → spectrum</h4>
+  <canvas id="c_fft_t" height="150"></canvas>
+  <canvas id="c_fft_s" height="190" style="margin-top:10px"></canvas>
+  <div class="controls">
+    <div class="ctrl"><label>Breathing (bpm)</label><input id="f_bpm" type="range" min="10" max="60" step="1" value="30"><output id="f_bpm_o"></output></div>
+    <div class="ctrl"><label>Noise</label><input id="f_noise" type="range" min="0" max="1.5" step="0.01" value="0.3"><output id="f_noise_o"></output></div>
+  </div>
+  <div class="readout" id="fft_r"></div>
+  <p class="muted" style="font-size:0.86rem;margin-bottom:0">Top: the messy time signal. Bottom: its spectrum.
+  The shaded strip is the breathing band (0.1–1.0&nbsp;Hz); the marked bar is the detected peak. Crank the
+  noise up — notice the breathing spike usually stays the tallest thing in the band long after the time
+  signal looks like a scribble. <b>That robustness is the whole reason we work in the frequency world.</b></p>
+  <p class="tryit"><b>Try this →</b> set the bpm, then push Noise toward the top. <b>Notice that</b> the top
+  signal dissolves into fuzz while the green peak in the spectrum stays put at the right frequency — the
+  readout keeps reporting the correct bpm. The prism finds the rhythm your eye has already lost.</p>
+</div>
+
+<!-- 7. WINDOW -->
+<h2 id="window"><span class="step">7</span>The window: being gentle at the edges</h2>
+<p>The FFT quietly assumes the chunk of signal you give it repeats forever, end joined back to start. But a
+30-second slice almost never starts and ends at the same value, so there's a sudden "jump" where the ends
+meet. The FFT sees that artificial jump as a burst of fake high frequencies, which smears the spectrum and
+can blur our peak. This smearing is called <span class="term">spectral leakage</span>.</p>
+
+<div class="demo analogy">
+  <p style="margin:0"><b>Analogy.</b> A song that cuts off abruptly mid-note — jarring, a click. A song that
+  fades in and fades out is smooth. A <span class="term">window</span> does the fade: we multiply the signal
+  by a gentle curve that's zero at both ends and full in the middle, so the edges taper away instead of
+  slamming shut.</p>
+</div>
+
+<p>We use a standard, well-behaved fade curve called the <span class="term">Hann window</span>. Below, the
+raw slice (with its abrupt ends) versus the same slice after windowing. The windowed version eases to zero
+at both ends, giving a cleaner, sharper spectrum.</p>
+
+<div class="demo">
+  <h4>Play: fade the edges, sharpen the spectrum</h4>
+  <canvas id="c_win" height="170"></canvas>
+  <canvas id="c_win_s" height="150" style="margin-top:10px"></canvas>
+  <div class="controls">
+    <div class="ctrl"><label>Window strength</label><input id="win_s" type="range" min="0" max="1" step="0.01" value="0"><output id="win_s_o"></output></div>
+  </div>
+  <div class="legend">
+    <span><i class="swatch" style="background:#3a4452"></i> fade curve</span>
+    <span><i class="swatch" style="background:var(--accent)"></i> windowed slice</span>
+    <span><i class="swatch" style="background:var(--good)"></i> resulting spectrum</span>
+  </div>
+  <div class="readout" id="win_r"></div>
+  <p class="tryit"><b>Try this →</b> start at strength 0 (no window — ends slam shut) and watch the spectrum
+  below: the peak is smeared and surrounded by leakage skirts. Now drag strength to 1. <b>Notice that</b> the
+  signal eases to zero at both ends and the spectral peak snaps into a clean, sharp spike. That sharper peak
+  is easier and more accurate to pin down.</p>
+</div>
+
+<!-- 8. PEAK -->
+<h2 id="peak"><span class="step">8</span>Finding the peak precisely</h2>
+<p>The spectrum isn't perfectly smooth — it's a row of discrete bars, called <span class="term">bins</span>,
+each covering a small frequency range. The true breathing frequency usually falls <em>between</em> two bins,
+so just grabbing the tallest bar rounds us off a little.</p>
+<p>To do better, we look at the tallest bar and its two immediate neighbors and fit a little parabola (a
+smooth U/∩ curve) through those three points. The exact top of that curve lands between the bars and gives a
+more precise frequency. This is <span class="term">parabolic peak interpolation</span> — a small step that
+sharpens the final bpm.</p>
+<div class="demo analogy">
+  <p style="margin:0"><b>Analogy.</b> You have temperature readings at 1:00, 2:00, and 3:00, and you want to
+  know when it was hottest. The peak wasn't necessarily exactly at 2:00 — but by looking at how the three
+  readings curve, you can estimate the true high point fell at, say, 2:12. Same trick, applied to the spectrum.</p>
+</div>
+
+<!-- 9. AUTOCORRELATION -->
+<h2 id="autocorr"><span class="step">9</span>Autocorrelation: a second opinion</h2>
+<p>The spectrum gives us an answer — but a good monitor double-checks itself with a completely different
+method, and only trusts the answer when both agree. That second method is
+<span class="term">autocorrelation</span>.</p>
+<p>The idea: take the signal, make a copy, and slide the copy sideways in time. At each shift (called a
+<span class="term">lag</span>) we measure how well the copy lines up with the original. When the shift
+equals one breathing period, the peaks land on peaks and troughs on troughs — a great match. So the lag
+where the match score is highest <em>is</em> the breathing period, which we flip into a frequency and a bpm.</p>
+<div class="demo analogy">
+  <p style="margin:0"><b>Analogy.</b> Clapping along to a song. You try a rhythm, and when your claps line up
+  with the beat, it "locks in" and feels right. Autocorrelation is the signal trying to clap along with a
+  delayed copy of itself; it locks in when the delay matches its own rhythm.</p>
+</div>
+
+<div class="demo">
+  <h4>Play: slide a copy of the signal</h4>
+  <canvas id="c_ac_sig" height="150"></canvas>
+  <canvas id="c_ac_score" height="160" style="margin-top:10px"></canvas>
+  <div class="controls">
+    <div class="ctrl"><label>Shift (lag)</label><input id="ac_lag" type="range" min="0" max="6" step="0.02" value="0"><output id="ac_lag_o"></output></div>
+  </div>
+  <div class="legend">
+    <span><i class="swatch" style="background:var(--muted)"></i> original</span>
+    <span><i class="swatch" style="background:var(--accent)"></i> shifted copy</span>
+    <span><i class="swatch" style="background:var(--good)"></i> match score vs. shift</span>
+  </div>
+  <div class="readout" id="ac_r"></div>
+  <p class="tryit"><b>Try this →</b> slowly drag the Shift slider from 0. <b>Notice that</b> at first the blue
+  copy is out of step with the grey original and the match score is low — then around 2.5 s they suddenly line
+  up crest-on-crest, the readout says "locked in," and the green score curve hits its peak. That lag is one
+  whole breath.</p>
+</div>
+
+<!-- 10. CONFIDENCE -->
+<h2 id="confidence"><span class="step">10</span>Confidence: when to trust the number</h2>
+<p>A number is only useful if we know whether to believe it. The monitor never just shows a bpm blindly — it
+rates its own <span class="term">confidence</span> from three honest checks:</p>
+<div class="steps">
+  <div class="s"><b>Prominence.</b> How much taller is the breathing peak than the typical clutter around it
+  in the band? A peak that towers over the noise is trustworthy; one barely poking above the grass is not.</div>
+  <div class="s"><b>Cycles seen.</b> How many whole breaths actually happened in the window? Measuring a rhythm
+  from 8 breaths is far safer than guessing it from one and a half.</div>
+  <div class="s"><b>Agreement.</b> Do the spectrum and autocorrelation — two independent methods — land on nearly
+  the same bpm? If they disagree, something's off and we don't pretend otherwise.</div>
+</div>
+<p>From these we assign a tier: <span class="pill high">high</span> <span class="pill medium">medium</span>
+<span class="pill low">low</span>. This is the safety heart of the app. <b>Only a medium-or-better reading is
+allowed to turn the screen green ("in range") or red (alarm).</b> A low-confidence reading — he shifted the
+phone, a truck went by, or the breathing signal faded — shows a calm amber <em>"Signal uncertain"</em>
+instead, and <b>never</b> fires the red alarm. That way a garbage reading can't masquerade as a real
+too-fast or too-slow result.</p>
+
+<div class="card disclaimer">
+  <strong>Important, and worth repeating.</strong> Because a stopped or very weak breath reads as
+  low-confidence, it shows as "Signal uncertain," <strong>not</strong> a red alarm. This is deliberate and
+  honest — we won't blare a confident-looking alarm off noise — but it means this is <strong>not an apnea
+  monitor and not a medical device</strong>. A quiet screen never means a child is safe. Never rely on it to
+  watch a sleeping child; if you're worried, look, count manually, and call a clinician.
+</div>
+
+<!-- 11. PIPELINE -->
+<h2 id="pipeline"><span class="step">11</span>The whole pipeline, end to end</h2>
+<p>Now every piece is on the table. Here's the complete journey, the same one that runs every ~10 seconds on
+the last 30 seconds of motion data:</p>
+<div class="steps">
+  <div class="s"><b>1 · Sense.</b> Read gravity's pull on the phone's three axes; breathing tilts it, nudging those readings.</div>
+  <div class="s"><b>2 · Resample.</b> Lay the uneven samples onto an even time grid (straight-line interpolation).</div>
+  <div class="s"><b>3 · Detrend.</b> Subtract the best-fit straight line to kill offset and slow drift.</div>
+  <div class="s"><b>4 · Window.</b> Apply the Hann fade so the edges don't create fake frequencies.</div>
+  <div class="s"><b>5 · FFT → spectrum.</b> Transform to the frequency world and look only inside the 0.1–1.0&nbsp;Hz breathing band.</div>
+  <div class="s"><b>6 · Peak + refine.</b> Take the tallest bar in the band and parabola-interpolate for a precise frequency → ×60 = bpm.</div>
+  <div class="s"><b>7 · Cross-check.</b> Run autocorrelation independently; require the two to agree.</div>
+  <div class="s"><b>8 · Confidence → display.</b> Grade it high/medium/low; only confident readings drive the green/red states.</div>
+</div>
+<p>We run that for each of the three axes and keep whichever gives the clearest peak, since the best axis
+depends on how the phone happens to be lying. Play with the real thing below — set a breathing rate, add
+noise, and watch the signal pass through every stage to a final bpm and confidence grade.</p>
+
+<div class="demo">
+  <h4>Play: the full pipeline</h4>
+  <canvas id="c_pipe" height="420"></canvas>
+  <div class="controls">
+    <div class="ctrl"><label>True breathing (bpm)</label><input id="p_bpm" type="range" min="12" max="55" step="1" value="30"><output id="p_bpm_o"></output></div>
+    <div class="ctrl"><label>Noise</label><input id="p_noise" type="range" min="0" max="2.5" step="0.01" value="0.4"><output id="p_noise_o"></output></div>
+    <div class="ctrl"><label>Slow drift</label><input id="p_drift" type="range" min="0" max="1.5" step="0.01" value="0.5"><output id="p_drift_o"></output></div>
+    <div class="ctrl"><label>Breathing strength</label><input id="p_str" type="range" min="0" max="1.5" step="0.01" value="1"><output id="p_str_o"></output></div>
+  </div>
+  <div class="readout big" id="pipe_r"></div>
+  <p class="tryit"><b>Try this →</b> with full Breathing strength, pile on Noise and Drift — notice the bpm
+  barely moves and confidence stays <span class="pill high">high</span>/<span class="pill medium">medium</span>.
+  The frequency method genuinely shrugs off that kind of mess. Now turn <b>Breathing strength</b> down toward
+  zero (the signal fading, or breathing becoming too shallow to detect). <b>Notice that</b> the peak sinks
+  into the clutter and confidence drops to <span class="pill low">low</span> → the real monitor shows "Signal
+  uncertain," <b>not</b> a reading. This is the exact situation the safety warning is about: a faint or absent
+  breath looks <em>uncertain</em>, never a reassuring green and never a red alarm.</p>
+</div>
+
+<hr />
+<p>That's the whole thing. The monitor is doing honest, understandable arithmetic on a faint wobble — clever
+in the details, but no magic. The most important part isn't the math; it's knowing its limits.</p>
+<a class="backlink" href="../resp-rate/">← Back to the Breathing Rate Monitor</a>
+
+<footer>
+  Runs entirely in your browser — nothing is recorded or sent. Educational explainer for the Breathing Rate
+  Monitor. Not medical advice; not a medical device.
+</footer>
+
+<script>
+"use strict";
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const TAU = Math.PI * 2;
+  const demos = [];
+
+  // ---------- shared DSP ----------
+  function fft(re, im) {
+    const n = re.length;
+    for (let i = 1, j = 0; i < n; i++) { let bit = n >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit; if (i < j) { const tr = re[i]; re[i] = re[j]; re[j] = tr; const ti = im[i]; im[i] = im[j]; im[j] = ti; } }
+    for (let len = 2; len <= n; len <<= 1) {
+      const ang = -TAU / len, wr = Math.cos(ang), wi = Math.sin(ang);
+      for (let i = 0; i < n; i += len) {
+        let cr = 1, ci = 0;
+        for (let k = 0; k < len / 2; k++) {
+          const ur = re[i + k], ui = im[i + k];
+          const vr = re[i + k + len / 2] * cr - im[i + k + len / 2] * ci;
+          const vi = re[i + k + len / 2] * ci + im[i + k + len / 2] * cr;
+          re[i + k] = ur + vr; im[i + k] = ui + vi;
+          re[i + k + len / 2] = ur - vr; im[i + k + len / 2] = ui - vi;
+          const ncr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = ncr;
+        }
+      }
+    }
+  }
+  function nextPow2(n) { let p = 1; while (p < n) p <<= 1; return p; }
+  function ifft(re, im) { const n = re.length; for (let i = 0; i < n; i++) im[i] = -im[i]; fft(re, im); for (let i = 0; i < n; i++) { re[i] /= n; im[i] = -im[i] / n; } }
+  function bandpass(sig, fs, lo, hi) {
+    const n = sig.length, N = nextPow2(n);
+    const re = new Float64Array(N), im = new Float64Array(N);
+    for (let i = 0; i < n; i++) re[i] = sig[i];
+    fft(re, im);
+    for (let i = 0; i < N; i++) {
+      const fr = (i <= N / 2 ? i : i - N) * fs / N;
+      const a = Math.abs(fr);
+      if (a < lo || a > hi) { re[i] = 0; im[i] = 0; }
+    }
+    ifft(re, im);
+    const out = new Float64Array(n); for (let i = 0; i < n; i++) out[i] = re[i];
+    return out;
+  }
+  function detrend(x) {
+    const n = x.length; let sx = 0, sy = 0, sxx = 0, sxy = 0;
+    for (let i = 0; i < n; i++) { sx += i; sy += x[i]; sxx += i * i; sxy += i * x[i]; }
+    const d = n * sxx - sx * sx;
+    const slope = d !== 0 ? (n * sxy - sx * sy) / d : 0;
+    const intercept = (sy - slope * sx) / n;
+    const o = new Float64Array(n);
+    for (let i = 0; i < n; i++) o[i] = x[i] - (slope * i + intercept);
+    return o;
+  }
+  function hannCurve(n) { const o = new Float64Array(n); for (let i = 0; i < n; i++) o[i] = 0.5 - 0.5 * Math.cos(TAU * i / (n - 1)); return o; }
+  function hann(x) { const w = hannCurve(x.length), o = new Float64Array(x.length); for (let i = 0; i < x.length; i++) o[i] = x[i] * w[i]; return o; }
+  const BAND_LO = 0.1, BAND_HI = 1.0;
+  function spectrum(sig, fs) {
+    const w = hann(detrend(sig)), N = nextPow2(w.length);
+    const re = new Float64Array(N), im = new Float64Array(N);
+    for (let i = 0; i < w.length; i++) re[i] = w[i];
+    fft(re, im);
+    const half = N >> 1, freqs = new Float64Array(half), power = new Float64Array(half);
+    for (let i = 0; i < half; i++) { freqs[i] = i * fs / N; power[i] = re[i] * re[i] + im[i] * im[i]; }
+    return { freqs, power, N };
+  }
+  function spectralEstimate(sig, fs) {
+    const { freqs, power } = spectrum(sig, fs);
+    let peakI = -1, peakP = -1; const bandP = [];
+    for (let i = 0; i < freqs.length; i++) if (freqs[i] >= BAND_LO && freqs[i] <= BAND_HI) { bandP.push(power[i]); if (power[i] > peakP) { peakP = power[i]; peakI = i; } }
+    if (peakI < 0) return null;
+    let fPeak = freqs[peakI];
+    if (peakI > 0 && peakI < freqs.length - 1) {
+      const a = power[peakI - 1], b = power[peakI], c = power[peakI + 1], den = a - 2 * b + c;
+      if (den !== 0) fPeak = (peakI + 0.5 * (a - c) / den) * fs / (power.length * 2);
+    }
+    const sorted = bandP.slice().sort((x, y) => x - y);
+    const median = sorted[Math.floor(sorted.length / 2)] || 1e-9;
+    return { freq: fPeak, bpm: fPeak * 60, prominence: peakP / (median || 1e-9), peakI, freqs, power };
+  }
+  function autocorr(sig, fs) {
+    const x = detrend(sig), n = x.length;
+    const minLag = Math.floor(fs / BAND_HI), maxLag = Math.floor(fs / BAND_LO);
+    let norm = 0; for (let i = 0; i < n; i++) norm += x[i] * x[i];
+    if (norm <= 0) return null;
+    let bestLag = -1, bestVal = -Infinity;
+    for (let lag = minLag; lag <= Math.min(maxLag, n - 1); lag++) {
+      let s = 0; for (let i = 0; i + lag < n; i++) s += x[i] * x[i + lag];
+      const v = s / norm; if (v > bestVal) { bestVal = v; bestLag = lag; }
+    }
+    if (bestLag <= 0) return null;
+    return { bpm: fs / bestLag * 60, strength: bestVal };
+  }
+
+  // ---------- noise helper ----------
+  let seed = 12345;
+  function rnd() { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; }
+  function gauss() { let u = 0, v = 0; while (u === 0) u = rnd(); while (v === 0) v = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(TAU * v); }
+
+  // ---------- canvas helpers ----------
+  function fit(c, cssH) {
+    const dpr = window.devicePixelRatio || 1;
+    const w = c.clientWidth || 600;
+    c.width = Math.floor(w * dpr); c.height = Math.floor(cssH * dpr);
+    const ctx = c.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx, W: w, H: cssH };
+  }
+  function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+  const COL = { bg: "#1f2630", grid: "rgba(255,255,255,.07)", accent: "#5cc8ff", muted: "#9aa7b5", good: "#58d68d", warn: "#f5b041", bad: "#ec7063", faint: "#3a4452" };
+
+  function clear(ctx, W, H) { ctx.clearRect(0, 0, W, H); }
+  function hline(ctx, W, y) { ctx.strokeStyle = COL.grid; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+  // draw array across full width into vertical band [y0,y1], fixed amplitude scale 'amp' (half-range)
+  function drawArray(ctx, W, data, y0, y1, amp, color, lw, dots) {
+    const mid = (y0 + y1) / 2, half = (y1 - y0) / 2 - 3;
+    const sc = half / (amp || 1);
+    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = lw || 2;
+    ctx.beginPath();
+    for (let i = 0; i < data.length; i++) {
+      const x = data.length > 1 ? i / (data.length - 1) * W : 0;
+      const y = mid - Math.max(-half, Math.min(half, data[i] * sc));
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    }
+    ctx.stroke();
+    if (dots) for (let i = 0; i < data.length; i++) { const x = data.length > 1 ? i / (data.length - 1) * W : 0; const y = mid - Math.max(-half, Math.min(half, data[i] * sc)); ctx.beginPath(); ctx.arc(x, y, 2.6, 0, TAU); ctx.fill(); }
+  }
+  function autoAmp(data) { let m = 0; for (const v of data) m = Math.max(m, Math.abs(v)); return m || 1; }
+
+  // =================================================================
+  // DEMO 1: single sine
+  // =================================================================
+  (function () {
+    const c = $("c_sine"), DUR = 10;
+    function render() {
+      const f = parseFloat($("sine_f").value), a = parseFloat($("sine_a").value);
+      $("sine_f_o").textContent = f.toFixed(2) + " Hz";
+      $("sine_a_o").textContent = a.toFixed(2);
+      const { ctx, W, H } = fit(c, 200);
+      clear(ctx, W, H); hline(ctx, W, H / 2);
+      // highlight one period starting at t=0.5s
+      const t0 = 0.5, period = 1 / f;
+      const x0 = t0 / DUR * W, x1 = Math.min(DUR, t0 + period) / DUR * W;
+      ctx.fillStyle = "rgba(92,200,255,.10)"; ctx.fillRect(x0, 8, x1 - x0, H - 16);
+      ctx.strokeStyle = COL.accent; ctx.lineWidth = 2.5; ctx.beginPath();
+      const N = 600;
+      for (let i = 0; i <= N; i++) { const t = i / N * DUR; const y = H / 2 - Math.sin(TAU * f * t) * a * (H / 2 - 14); const x = i / N * W; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+      ctx.stroke();
+      ctx.fillStyle = COL.muted; ctx.font = "12px ui-monospace, monospace";
+      ctx.fillText("0 s", 2, H - 4); ctx.fillText(DUR + " s", W - 30, H - 4);
+      ctx.fillStyle = COL.accent; ctx.fillText("one period = " + period.toFixed(2) + " s", x0 + 4, 20);
+      $("sine_r").innerHTML = "frequency <b>" + f.toFixed(2) + " Hz</b> → period <b>" + period.toFixed(2) + " s</b> → <b>" + Math.round(f * 60) + " breaths/min</b>";
+    }
+    $("sine_f").addEventListener("input", render); $("sine_a").addEventListener("input", render);
+    demos.push(render);
+  })();
+
+  // =================================================================
+  // DEMO 2: sampling + aliasing
+  // =================================================================
+  (function () {
+    const c = $("c_samp"), DUR = 6, TRUE_F = 0.5;
+    function render() {
+      const fs = parseFloat($("samp_fs").value);
+      $("samp_fs_o").textContent = fs.toFixed(1) + " Hz";
+      const { ctx, W, H } = fit(c, 200);
+      clear(ctx, W, H); hline(ctx, W, H / 2);
+      const amp = H / 2 - 16;
+      // true wave
+      ctx.strokeStyle = COL.faint; ctx.lineWidth = 2; ctx.beginPath();
+      const N = 700;
+      for (let i = 0; i <= N; i++) { const t = i / N * DUR; const y = H / 2 - Math.sin(TAU * TRUE_F * t) * amp; const x = t / DUR * W; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+      ctx.stroke();
+      // samples
+      const pts = [];
+      for (let t = 0; t <= DUR + 1e-9; t += 1 / fs) { const x = t / DUR * W; const y = H / 2 - Math.sin(TAU * TRUE_F * t) * amp; pts.push([x, y]); }
+      ctx.strokeStyle = COL.warn; ctx.lineWidth = 2; ctx.beginPath();
+      pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.stroke();
+      ctx.fillStyle = COL.accent; pts.forEach(p => { ctx.beginPath(); ctx.arc(p[0], p[1], 3.2, 0, TAU); ctx.fill(); });
+      const per2 = 2; // samples per cycle at this rate
+      const spc = fs / TRUE_F;
+      let msg;
+      if (spc >= 8) msg = "<b>" + spc.toFixed(1) + "</b> samples per breath — plenty; the samples trace the true wave faithfully.";
+      else if (spc >= 3) msg = "<b>" + spc.toFixed(1) + "</b> samples per breath — coarse, but the rhythm is still recoverable.";
+      else if (spc >= 2) msg = "<b>" + spc.toFixed(1) + "</b> samples per breath — right at the edge; the shape is badly distorted.";
+      else msg = "<b>" + spc.toFixed(1) + "</b> samples per breath — too few. The yellow line now shows a <b>fake slower wave</b> that isn't really there. That's aliasing.";
+      $("samp_r").innerHTML = msg;
+    }
+    $("samp_fs").addEventListener("input", render);
+    demos.push(render);
+  })();
+
+  // =================================================================
+  // DEMO 2b: filtering (detrend + bandpass)
+  // =================================================================
+  (function () {
+    const c = $("c_filt"), DUR = 20, fs = 20, n = DUR * fs, TRUE_BPM = 30;
+    const f = TRUE_BPM / 60;
+    function render() {
+      const drift = parseFloat($("fl_drift").value), noise = parseFloat($("fl_noise").value);
+      const doDet = $("fl_detrend").checked, doBand = $("fl_band").checked;
+      $("fl_drift_o").textContent = drift.toFixed(2); $("fl_noise_o").textContent = noise.toFixed(2);
+      const raw = new Float64Array(n);
+      seed = 555;
+      for (let i = 0; i < n; i++) { const t = i / fs; raw[i] = 0.8 + Math.sin(TAU * f * t) + drift * (Math.sin(TAU * 0.025 * t + 0.4) + (t / DUR - 0.5) * 2) + noise * gauss(); }
+      let out = Float64Array.from(raw);
+      if (doDet) out = detrend(out);
+      if (doBand) out = bandpass(out, fs, BAND_LO, BAND_HI);
+      const { ctx, W, H } = fit(c, 230); clear(ctx, W, H);
+      const half = H / 2;
+      hline(ctx, W, half);
+      drawArray(ctx, W, raw, 4, half - 2, autoAmp(raw), COL.muted, 1.6);
+      drawArray(ctx, W, out, half + 2, H - 4, autoAmp(out), COL.accent, 2.2);
+      ctx.fillStyle = COL.muted; ctx.font = "11px ui-monospace, monospace";
+      ctx.fillText("raw", 6, 14); ctx.fillStyle = COL.accent; ctx.fillText("filtered", 6, half + 14);
+      const est = spectralEstimate(out, fs);
+      const ok = est && est.prominence >= 3.5;
+      $("filt_r").innerHTML = (doDet || doBand)
+        ? "recovered rhythm: <b>" + (est ? Math.round(est.bpm) : "—") + " bpm</b> &nbsp;·&nbsp; peak clarity <b>" + (est ? est.prominence.toFixed(1) : "0") + "×</b> " + (ok ? "— clean enough to trust" : "— still too murky")
+        : "no filtering applied — the breathing is buried in drift and noise.";
+    }
+    ["fl_drift", "fl_noise"].forEach(id => $(id).addEventListener("input", render));
+    ["fl_detrend", "fl_band"].forEach(id => $(id).addEventListener("change", render));
+    demos.push(render);
+  })();
+
+  // =================================================================
+  // DEMO 3: build a signal
+  // =================================================================
+  (function () {
+    const c = $("c_build"), DUR = 15, fs = 20, n = DUR * fs;
+    function render() {
+      const bpm = parseFloat($("b_bpm").value), drift = parseFloat($("b_drift").value), noise = parseFloat($("b_noise").value);
+      $("b_bpm_o").textContent = bpm + " bpm"; $("b_drift_o").textContent = drift.toFixed(2); $("b_noise_o").textContent = noise.toFixed(2);
+      const f = bpm / 60;
+      const breath = new Float64Array(n), drf = new Float64Array(n), nz = new Float64Array(n), sum = new Float64Array(n);
+      seed = 777;
+      for (let i = 0; i < n; i++) {
+        const t = i / fs;
+        breath[i] = Math.sin(TAU * f * t);
+        drf[i] = drift * Math.sin(TAU * 0.03 * t + 1) + drift * (t / DUR - 0.5) * 1.5;
+        nz[i] = noise * gauss();
+        sum[i] = breath[i] + drf[i] + nz[i];
+      }
+      const { ctx, W, H } = fit(c, 300);
+      clear(ctx, W, H);
+      const rowH = H / 4;
+      const labels = ["breathing", "slow drift", "noise", "SUM (what the phone sees)"];
+      const colors = [COL.accent, COL.warn, COL.bad, COL.good];
+      const arrs = [breath, drf, nz, sum];
+      const amps = [1.1, Math.max(0.3, drift * 2.2), Math.max(0.1, noise * 3), autoAmp(sum)];
+      for (let r = 0; r < 4; r++) {
+        const y0 = r * rowH, y1 = (r + 1) * rowH;
+        if (r > 0) hline(ctx, W, y0);
+        drawArray(ctx, W, arrs[r], y0 + 6, y1 - 6, amps[r], colors[r], r === 3 ? 2.2 : 1.8);
+        ctx.fillStyle = colors[r]; ctx.font = "11px ui-monospace, monospace";
+        ctx.fillText(labels[r], 6, y0 + 15);
+      }
+    }
+    ["b_bpm", "b_drift", "b_noise"].forEach(id => $(id).addEventListener("input", render));
+    demos.push(render);
+  })();
+
+  // =================================================================
+  // DEMO 4: FFT spectrum
+  // =================================================================
+  (function () {
+    const ct = $("c_fft_t"), cs = $("c_fft_s"), DUR = 30, fs = 10, n = DUR * fs;
+    function render() {
+      const bpm = parseFloat($("f_bpm").value), noise = parseFloat($("f_noise").value);
+      $("f_bpm_o").textContent = bpm + " bpm"; $("f_noise_o").textContent = noise.toFixed(2);
+      const f = bpm / 60; const sig = new Float64Array(n);
+      seed = 2024;
+      for (let i = 0; i < n; i++) { const t = i / fs; sig[i] = Math.sin(TAU * f * t) + 0.3 * Math.sin(TAU * 0.04 * t) + noise * gauss(); }
+      // time
+      let o = fit(ct, 150); clear(o.ctx, o.W, o.H); hline(o.ctx, o.W, o.H / 2);
+      drawArray(o.ctx, o.W, sig, 6, o.H - 6, autoAmp(sig), COL.accent, 1.6);
+      o.ctx.fillStyle = COL.muted; o.ctx.font = "11px ui-monospace, monospace"; o.ctx.fillText("time (30 s) →", 6, 14);
+      // spectrum
+      const est = spectralEstimate(sig, fs);
+      o = fit(cs, 190); const ctx = o.ctx, W = o.W, H = o.H; clear(ctx, W, H);
+      const fMax = 2.0; // display up to 2 Hz
+      let pMax = 1e-9; for (let i = 0; i < est.freqs.length; i++) if (est.freqs[i] <= fMax) pMax = Math.max(pMax, est.power[i]);
+      // band shading
+      const bx0 = BAND_LO / fMax * W, bx1 = BAND_HI / fMax * W;
+      ctx.fillStyle = "rgba(92,200,255,.08)"; ctx.fillRect(bx0, 0, bx1 - bx0, H - 20);
+      // bars
+      const base = H - 20;
+      for (let i = 0; i < est.freqs.length; i++) {
+        const fr = est.freqs[i]; if (fr > fMax) break;
+        const x = fr / fMax * W; const h = (est.power[i] / pMax) * (H - 30);
+        const inBand = fr >= BAND_LO && fr <= BAND_HI;
+        ctx.strokeStyle = i === est.peakI ? COL.good : (inBand ? COL.accent : COL.faint);
+        ctx.lineWidth = i === est.peakI ? 3 : 2;
+        ctx.beginPath(); ctx.moveTo(x, base); ctx.lineTo(x, base - h); ctx.stroke();
+      }
+      // peak marker
+      const px = est.freq / fMax * W;
+      ctx.strokeStyle = COL.good; ctx.setLineDash([4, 3]); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, base); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = COL.muted; ctx.font = "11px ui-monospace, monospace";
+      ctx.fillText("0 Hz", 2, H - 5); ctx.fillText("1 Hz", W / 2 - 14, H - 5); ctx.fillText(fMax + " Hz", W - 34, H - 5);
+      ctx.fillStyle = COL.good; ctx.fillText("peak", Math.min(W - 34, px + 4), 14);
+      $("fft_r").innerHTML = "detected peak: <b>" + est.freq.toFixed(2) + " Hz</b> = <b>" + Math.round(est.bpm) + " bpm</b> &nbsp;·&nbsp; peak stands <b>" + est.prominence.toFixed(1) + "×</b> above the band clutter";
+    }
+    ["f_bpm", "f_noise"].forEach(id => $(id).addEventListener("input", render));
+    demos.push(render);
+  })();
+
+  // =================================================================
+  // DEMO 5: Hann window
+  // =================================================================
+  (function () {
+    const csig = $("c_win"), cs = $("c_win_s"), fs = 8, n = 240; // 30 s @ 8 Hz
+    // use a frequency that sits BETWEEN FFT bins so leakage is visible
+    const F = 0.47;
+    function render() {
+      const s = parseFloat($("win_s").value);
+      $("win_s_o").textContent = s.toFixed(2);
+      const hc = hannCurve(n), win = new Float64Array(n), base = new Float64Array(n), out = new Float64Array(n);
+      for (let i = 0; i < n; i++) { const t = i / fs; base[i] = Math.sin(TAU * F * t); win[i] = (1 - s) + s * hc[i]; out[i] = base[i] * win[i]; }
+      // signal canvas
+      let o = fit(csig, 170); let ctx = o.ctx, W = o.W, H = o.H; clear(ctx, W, H); hline(ctx, W, H / 2);
+      ctx.strokeStyle = COL.faint; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]); ctx.beginPath();
+      for (let i = 0; i < n; i++) { const x = i / (n - 1) * W; const y = H - 6 - win[i] * (H - 12); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.stroke(); ctx.setLineDash([]);
+      drawArray(ctx, W, out, 6, H - 6, 1.05, COL.accent, 2);
+      ctx.fillStyle = COL.muted; ctx.font = "11px ui-monospace, monospace"; ctx.fillText("30-second slice (dashed = fade curve)", 6, 14);
+      // spectrum WITHOUT our standard detrend/hann (we apply the blended window ourselves)
+      const N = nextPow2(n), re = new Float64Array(N), im = new Float64Array(N);
+      for (let i = 0; i < n; i++) re[i] = out[i];
+      fft(re, im);
+      const half = N >> 1, power = new Float64Array(half); let pMax = 1e-9;
+      const fMax = 1.5;
+      for (let i = 0; i < half; i++) { power[i] = re[i] * re[i] + im[i] * im[i]; if (i * fs / N <= fMax) pMax = Math.max(pMax, power[i]); }
+      o = fit(cs, 150); ctx = o.ctx; W = o.W; H = o.H; clear(ctx, W, H);
+      const yb = H - 18;
+      for (let i = 0; i < half; i++) { const fr = i * fs / N; if (fr > fMax) break; const x = fr / fMax * W; const h = power[i] / pMax * (H - 28); const near = Math.abs(fr - F) < fs / N; ctx.strokeStyle = near ? COL.good : COL.accent; ctx.lineWidth = near ? 3 : 1.6; ctx.beginPath(); ctx.moveTo(x, yb); ctx.lineTo(x, yb - h); ctx.stroke(); }
+      ctx.fillStyle = COL.muted; ctx.font = "11px ui-monospace, monospace"; ctx.fillText("spectrum", 6, 14); ctx.fillText("0", 2, H - 4); ctx.fillText("1 Hz", W / fMax - 10, H - 4);
+      // measure leakage: energy outside the 2 bins nearest the peak vs total
+      let peakBin = Math.round(F * N / fs), total = 0, inpk = 0;
+      for (let i = 0; i < half; i++) { const fr = i * fs / N; if (fr > fMax) continue; total += power[i]; if (Math.abs(i - peakBin) <= 1) inpk += power[i]; }
+      const concentration = total > 0 ? inpk / total * 100 : 0;
+      $("win_r").innerHTML = "window strength <b>" + s.toFixed(2) + "</b> → <b>" + concentration.toFixed(0) + "%</b> of the energy sits in the main peak" + (s < 0.1 ? " (lots leaks into the skirts)" : s > 0.9 ? " — tight and clean" : "");
+    }
+    $("win_s").addEventListener("input", render);
+    demos.push(render);
+  })();
+
+  // =================================================================
+  // DEMO 6: autocorrelation
+  // =================================================================
+  (function () {
+    const csig = $("c_ac_sig"), csc = $("c_ac_score"), DUR = 12, fs = 20, n = DUR * fs, TRUE_BPM = 24;
+    const f = TRUE_BPM / 60, period = 1 / f;
+    const sig = new Float64Array(n);
+    (function build() { seed = 42; for (let i = 0; i < n; i++) { const t = i / fs; sig[i] = Math.sin(TAU * f * t) + 0.12 * gauss(); } })();
+    // precompute score curve over lag 0..6s
+    const maxLagS = 6, lagSamples = maxLagS * fs, score = new Float64Array(lagSamples + 1);
+    (function () { let norm = 0; const x = detrend(sig); for (let i = 0; i < n; i++) norm += x[i] * x[i]; for (let lag = 0; lag <= lagSamples; lag++) { let s = 0; for (let i = 0; i + lag < n; i++) s += x[i] * x[i + lag]; score[lag] = s / norm; } })();
+    function render() {
+      const lagS = parseFloat($("ac_lag").value);
+      $("ac_lag_o").textContent = lagS.toFixed(2) + " s";
+      const shift = Math.round(lagS * fs);
+      // signals
+      let o = fit(csig, 150); let ctx = o.ctx, W = o.W, H = o.H; clear(ctx, W, H); hline(ctx, W, H / 2);
+      const amp = H / 2 - 12;
+      ctx.strokeStyle = COL.muted; ctx.lineWidth = 1.8; ctx.beginPath();
+      for (let i = 0; i < n; i++) { const x = i / (n - 1) * W; const y = H / 2 - sig[i] * amp * 0.9; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.stroke();
+      ctx.strokeStyle = COL.accent; ctx.lineWidth = 2; ctx.beginPath();
+      for (let i = 0; i < n; i++) { const si = i - shift; if (si < 0) continue; const x = i / (n - 1) * W; const y = H / 2 - sig[si] * amp * 0.9; (si === 0 || (i - shift) === 0) ? ctx.moveTo(x, y) : ctx.lineTo(x, y); } ctx.stroke();
+      // score
+      o = fit(csc, 160); ctx = o.ctx; W = o.W; H = o.H; clear(ctx, W, H);
+      const base = H - 18;
+      let sMin = Infinity, sMax = -Infinity; for (const v of score) { sMin = Math.min(sMin, v); sMax = Math.max(sMax, v); }
+      const rng = (sMax - sMin) || 1;
+      ctx.strokeStyle = COL.good; ctx.lineWidth = 2; ctx.beginPath();
+      for (let lag = 0; lag <= lagSamples; lag++) { const x = lag / lagSamples * W; const y = base - (score[lag] - sMin) / rng * (H - 28); lag ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.stroke();
+      // current lag marker
+      const mx = Math.min(lagSamples, shift) / lagSamples * W;
+      ctx.strokeStyle = COL.accent; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(mx, 0); ctx.lineTo(mx, base); ctx.stroke();
+      // true period marker
+      const tx = period / maxLagS * W;
+      ctx.strokeStyle = COL.warn; ctx.setLineDash([4, 3]); ctx.beginPath(); ctx.moveTo(tx, 0); ctx.lineTo(tx, base); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = COL.warn; ctx.font = "11px ui-monospace, monospace"; ctx.fillText("true period " + period.toFixed(2) + "s", Math.min(W - 110, tx + 4), 14);
+      ctx.fillStyle = COL.muted; ctx.fillText("0 s", 2, H - 4); ctx.fillText(maxLagS + " s", W - 26, H - 4);
+      const curScore = score[Math.min(lagSamples, shift)];
+      const near = Math.abs(lagS - period) < 0.15;
+      $("ac_r").innerHTML = "shift <b>" + lagS.toFixed(2) + " s</b> → match score <b>" + curScore.toFixed(2) + "</b>" + (near ? " &nbsp;— <b style='color:" + COL.good + "'>locked in! this shift = one breath = " + TRUE_BPM + " bpm</b>" : "");
+    }
+    $("ac_lag").addEventListener("input", render);
+    demos.push(render);
+  })();
+
+  // =================================================================
+  // DEMO 7: full pipeline
+  // =================================================================
+  (function () {
+    const c = $("c_pipe"), DUR = 30, fs = 15, n = DUR * fs;
+    function render() {
+      const bpm = parseFloat($("p_bpm").value), noise = parseFloat($("p_noise").value), drift = parseFloat($("p_drift").value), str = parseFloat($("p_str").value);
+      $("p_bpm_o").textContent = bpm + " bpm"; $("p_noise_o").textContent = noise.toFixed(2); $("p_drift_o").textContent = drift.toFixed(2); $("p_str_o").textContent = str.toFixed(2);
+      const f = bpm / 60; const raw = new Float64Array(n);
+      seed = 31337;
+      for (let i = 0; i < n; i++) { const t = i / fs; raw[i] = 0.6 + str * Math.sin(TAU * f * t) + drift * (Math.sin(TAU * 0.02 * t + 0.5) + (t / DUR - 0.5) * 2) + noise * gauss(); }
+      const det = detrend(raw);
+      const wnd = hann(det);
+      const est = spectralEstimate(raw, fs);
+      const ac = autocorr(raw, fs);
+      const span = DUR;
+      const cycles = est.freq * span;
+      const agree = ac ? Math.abs(ac.bpm - est.bpm) <= 3 : false;
+      let tier = "low";
+      if (est.prominence >= 8 && cycles >= 4 && agree) tier = "high";
+      else if (est.prominence >= 3.5 && cycles >= 3 && agree) tier = "medium";
+
+      const { ctx, W, H } = fit(c, 420);
+      clear(ctx, W, H);
+      const rows = [
+        ["1 · raw signal (gravity on one axis)", raw, COL.muted],
+        ["2 · detrended (drift & offset removed)", det, COL.accent],
+        ["3 · Hann-windowed (edges eased to zero)", wnd, COL.accent],
+      ];
+      const specH = 150, topH = H - specH;
+      const rowH = topH / 3;
+      for (let r = 0; r < 3; r++) {
+        const y0 = r * rowH, y1 = (r + 1) * rowH;
+        if (r > 0) hline(ctx, W, y0);
+        drawArray(ctx, W, rows[r][1], y0 + 4, y1 - 4, autoAmp(rows[r][1]), rows[r][2], 1.7);
+        ctx.fillStyle = COL.muted; ctx.font = "11px ui-monospace, monospace"; ctx.fillText(rows[r][0], 6, y0 + 14);
+      }
+      // spectrum row
+      const sy0 = topH; hline(ctx, W, sy0);
+      const fMax = 1.6, base = H - 18;
+      let pMax = 1e-9; for (let i = 0; i < est.freqs.length; i++) if (est.freqs[i] <= fMax) pMax = Math.max(pMax, est.power[i]);
+      const bx0 = BAND_LO / fMax * W, bx1 = BAND_HI / fMax * W;
+      ctx.fillStyle = "rgba(92,200,255,.08)"; ctx.fillRect(bx0, sy0 + 20, bx1 - bx0, base - sy0 - 20);
+      for (let i = 0; i < est.freqs.length; i++) { const fr = est.freqs[i]; if (fr > fMax) break; const x = fr / fMax * W; const h = est.power[i] / pMax * (base - sy0 - 26); const inB = fr >= BAND_LO && fr <= BAND_HI; ctx.strokeStyle = i === est.peakI ? COL.good : (inB ? COL.accent : COL.faint); ctx.lineWidth = i === est.peakI ? 3 : 1.6; ctx.beginPath(); ctx.moveTo(x, base); ctx.lineTo(x, base - h); ctx.stroke(); }
+      ctx.fillStyle = COL.muted; ctx.font = "11px ui-monospace, monospace"; ctx.fillText("4 · spectrum — peak in band = breathing rate", 6, sy0 + 14);
+      ctx.fillText("0", 2, H - 4); ctx.fillText("1 Hz", W / fMax / 1 * (1) - 0, H - 4);
+
+      const pill = '<span class="pill ' + tier + '">' + tier + '</span>';
+      const acTxt = ac ? Math.round(ac.bpm) + " bpm" : "—";
+      const stateTxt = tier === "low"
+        ? "→ monitor would show <b style='color:" + COL.warn + "'>Signal uncertain</b> (no green/red)"
+        : "→ monitor would show a <b style='color:" + COL.good + "'>confident reading</b>";
+      $("pipe_r").innerHTML =
+        "detected <b>" + Math.round(est.bpm) + " bpm</b> &nbsp;·&nbsp; confidence " + pill +
+        "<div class='muted' style='font-size:0.82rem;margin-top:6px;line-height:1.5'>" +
+        "spectrum " + Math.round(est.bpm) + " bpm · autocorr " + acTxt +
+        " · prominence " + est.prominence.toFixed(1) + "× · cycles " + cycles.toFixed(1) +
+        " · agree " + (agree ? "yes" : "no") + "<br>" + stateTxt + "</div>";
+    }
+    ["p_bpm", "p_noise", "p_drift", "p_str"].forEach(id => $(id).addEventListener("input", render));
+    demos.push(render);
+  })();
+
+  // ---------- run all + handle resize ----------
+  function renderAll() { for (const d of demos) d(); }
+  let rt; window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(renderAll, 120); });
+  renderAll();
+})();
+</script>
+</body>
+</html>

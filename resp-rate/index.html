@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Breathing Rate Monitor</title>
+<style>
+  :root {
+    --bg: #0f1216;
+    --panel: #171c23;
+    --panel-2: #1f2630;
+    --line: #2a333f;
+    --text: #e8edf3;
+    --muted: #9aa7b5;
+    --accent: #5cc8ff;
+    --accent-dim: #2b7fb0;
+    --good: #58d68d;
+    --warn: #f5b041;
+    --bad: #ec7063;
+    --radius: 16px;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: var(--sans); }
+  body {
+    min-height: 100dvh;
+    padding: max(14px, env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom));
+    max-width: 580px; margin: 0 auto;
+    -webkit-user-select: none; user-select: none;
+    position: relative; z-index: 1;
+  }
+  h1 { font-size: 1.3rem; margin: 2px 0 2px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 0.88rem; margin: 0 0 12px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 15px; margin-bottom: 13px; }
+  .disclaimer { background: #2a1b12; border-color: #5a3a1f; color: #ffcf9e; font-size: 0.82rem; line-height: 1.42; }
+  .disclaimer strong { color: #ffb366; }
+  .disclaimer .apnea { color: #ff9b9b; }
+  button {
+    font-family: var(--sans); font-size: 1rem; font-weight: 600;
+    border: none; border-radius: 12px; padding: 14px 18px; width: 100%;
+    background: var(--accent); color: #042030; cursor: pointer; transition: filter .15s, opacity .15s;
+  }
+  button.secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); }
+  button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent-dim); }
+  button:active { filter: brightness(0.9); }
+  button:disabled { opacity: 0.4; cursor: default; }
+  .btn-row { display: flex; gap: 10px; }
+  .btn-row > button { width: auto; flex: 1; }
+  canvas { width: 100%; height: 120px; display: block; background: var(--panel-2); border-radius: 12px; touch-action: none; }
+  .wave-meta { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--muted); margin-top: 6px; font-family: var(--mono); }
+  .hint { color: var(--muted); font-size: 0.88rem; line-height: 1.45; }
+  .hint b { color: var(--text); }
+  label.field { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 14px; }
+  .thresh-row { display: flex; gap: 12px; }
+  .thresh-row label { flex: 1; }
+  select, input[type=number] {
+    width: 100%; margin-top: 6px; background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; font-size: 1rem; font-family: var(--sans);
+  }
+  .toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 4px; }
+  .hidden { display: none !important; }
+
+  /* ---- big monitor readout ---- */
+  .monitor { text-align: center; padding: 22px 15px; transition: background .3s, border-color .3s; }
+  .state-label { font-size: 1.05rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 6px; }
+  .bignum { font-size: 5.2rem; font-weight: 800; line-height: 0.95; font-variant-numeric: tabular-nums; }
+  .bignum small { font-size: 1.1rem; font-weight: 500; color: var(--muted); display: block; margin-top: 2px; }
+  .substate { font-size: 0.9rem; color: var(--muted); margin-top: 8px; min-height: 1.2em; }
+  .rangeline { font-size: 0.82rem; color: var(--muted); margin-top: 10px; font-variant-numeric: tabular-nums; }
+
+  .monitor.ok    { border-color: rgba(88,214,141,.5); }
+  .monitor.ok .state-label, .monitor.ok .bignum { color: var(--good); }
+  .monitor.warming { border-color: var(--accent-dim); }
+  .monitor.warming .state-label, .monitor.warming .bignum { color: var(--accent); }
+  .monitor.uncertain { border-color: rgba(245,176,65,.6); background: rgba(245,176,65,.06); }
+  .monitor.uncertain .state-label, .monitor.uncertain .bignum { color: var(--warn); }
+  .monitor.alarm { border-color: var(--bad); background: rgba(236,112,99,.10); }
+  .monitor.alarm .state-label, .monitor.alarm .bignum { color: var(--bad); }
+
+  .substats { display: flex; justify-content: center; gap: 16px; font-size: 0.74rem; color: var(--muted); margin-top: 12px; font-family: var(--mono); }
+
+  /* ---- full-screen red flash (alarm only) ---- */
+  #flash {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background: #e02b1d; opacity: 0;
+  }
+  #flash.alarm { opacity: 1; animation: pulse 0.9s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: .18; } 50% { opacity: .78; } }
+  @media (prefers-reduced-motion: reduce) {
+    #flash.alarm { animation: none; opacity: .5; }
+  }
+  .flashmsg {
+    position: fixed; left: 0; right: 0; top: max(20px, env(safe-area-inset-top)); z-index: 2; text-align: center;
+    color: #fff; font-weight: 900; font-size: 2.2rem; letter-spacing: .04em;
+    text-shadow: 0 2px 14px rgba(0,0,0,.5); pointer-events: none;
+  }
+
+  .status-chip { font-size: 0.72rem; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; }
+  .dot.on { background: var(--good); }
+  .dot.off { background: var(--bad); }
+  .err { color: var(--bad); font-size: 0.9rem; line-height: 1.4; }
+  footer { color: var(--muted); font-size: 0.72rem; text-align: center; margin-top: 16px; line-height: 1.5; }
+  .tap-count { text-align: center; }
+  .tap-count .n { font-size: 2.4rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+  <div id="flash"></div>
+  <div id="flashmsg" class="flashmsg hidden"></div>
+
+  <h1>Breathing Rate Monitor</h1>
+  <p class="sub">Continuous ambient estimate from phone motion sensors. <a href="../resp-rate-methodology/" style="color:var(--accent)">How it works →</a></p>
+
+  <div class="card disclaimer">
+    <strong>Not a medical device. Not an apnea monitor.</strong>
+    This is an experimental estimate for curiosity only — it can be wrong or miss events entirely.
+    <span class="apnea">If breathing stops, the app will NOT sound a red alarm — a stopped or very weak
+    signal shows as "Signal uncertain," not an alert.</span> Never rely on it to watch a sleeping child.
+    A quiet screen does not mean a child is safe. If you are worried, look, count manually, and contact a clinician.
+  </div>
+
+  <!-- SETUP -->
+  <section id="setup" class="card">
+    <div class="thresh-row">
+      <label class="field">Low alarm (bpm)
+        <input type="number" id="lowInput" min="1" max="200" step="1" />
+      </label>
+      <label class="field">High alarm (bpm)
+        <input type="number" id="highInput" min="1" max="200" step="1" />
+      </label>
+    </div>
+    <div class="toggle card" style="margin:0 0 14px;padding:12px 14px;background:var(--panel-2)">
+      <span>Also beep on alarm</span>
+      <input type="checkbox" id="soundToggle" style="width:auto;transform:scale(1.4)" />
+    </div>
+    <p class="hint">
+      <b>How to use:</b> Lay the phone flat and gently on the child's chest or belly (screen up) so it rises
+      and falls with each breath. Tap start and keep it still. The estimate updates every ~10&nbsp;seconds
+      on a rolling 30-second window. Typical toddler resting rate is ~20–40&nbsp;bpm.
+    </p>
+    <button id="startBtn">Enable motion sensor &amp; start monitoring</button>
+    <p id="setupErr" class="err"></p>
+  </section>
+
+  <!-- MONITOR -->
+  <section id="monitorView" class="hidden">
+    <div id="monitor" class="card monitor warming">
+      <div class="state-label" id="stateLabel">Warming up…</div>
+      <div class="bignum"><span id="bpmVal">--</span><small>breaths / min</small></div>
+      <div class="substate" id="subState">Collecting the first window…</div>
+      <div class="rangeline" id="rangeLine"></div>
+      <div class="substats">
+        <span id="confStat">conf: —</span>
+        <span id="updStat">next: --s</span>
+        <span id="axisStat">axis: —</span>
+      </div>
+    </div>
+
+    <div class="card" style="padding:12px">
+      <canvas id="wave" width="600" height="240"></canvas>
+      <div class="wave-meta">
+        <span id="rateInfo">sampling…</span>
+        <span class="status-chip"><span id="wakeDot" class="dot"></span><span id="wakeTxt">screen lock: —</span></span>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="secondary" id="stopBtn">Stop</button>
+      <button class="ghost" id="manualBtn">Manual count</button>
+    </div>
+    <p id="monErr" class="err"></p>
+  </section>
+
+  <!-- MANUAL SANITY CHECK -->
+  <section id="manual" class="card hidden">
+    <h1 style="font-size:1.1rem">Manual count (sanity check)</h1>
+    <p class="hint">Watch the child and tap once on every breath (one inhale+exhale). After ~20–30 seconds
+      you'll get a reference rate to compare against the monitor.</p>
+    <div class="tap-count">
+      <div class="n" id="tapRate">-- <small style="font-size:1rem;color:var(--muted)">bpm</small></div>
+      <div class="hint" id="tapInfo">0 breaths • 0.0 s</div>
+    </div>
+    <button id="tapBtn" style="margin-top:14px">Tap on each breath</button>
+    <div class="btn-row" style="margin-top:10px">
+      <button class="secondary" id="tapResetBtn">Reset</button>
+      <button class="ghost" id="tapDoneBtn">Back to monitor</button>
+    </div>
+  </section>
+
+  <footer>
+    On-device only — no data is stored or sent. On iPhone/Safari you'll be asked to allow
+    "Motion &amp; Orientation Access"; tap Allow. Keep this tab in the foreground while monitoring.
+  </footer>
+
+<script>
+"use strict";
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const sec = { setup: $("setup"), monitor: $("monitorView"), manual: $("manual") };
+  function show(name) { for (const k in sec) sec[k].classList.toggle("hidden", k !== name); }
+
+  // ---------- persisted settings ----------
+  const LS = { low: "resp.low", high: "resp.high", sound: "resp.sound" };
+  function loadSettings() {
+    const low = parseInt(localStorage.getItem(LS.low) || "", 10);
+    const high = parseInt(localStorage.getItem(LS.high) || "", 10);
+    $("lowInput").value = Number.isFinite(low) ? low : 15;
+    $("highInput").value = Number.isFinite(high) ? high : 45;
+    $("soundToggle").checked = localStorage.getItem(LS.sound) === "1";
+  }
+  function saveSettings() {
+    localStorage.setItem(LS.low, String(lowBpm));
+    localStorage.setItem(LS.high, String(highBpm));
+    localStorage.setItem(LS.sound, $("soundToggle").checked ? "1" : "0");
+  }
+  let lowBpm = 15, highBpm = 45;
+
+  // ---------- capture state ----------
+  const WINDOW_SEC = 30;     // sliding analysis window
+  const UPDATE_SEC = 10;     // recompute cadence
+  const MIN_FILL_SEC = 20;   // minimum data before first estimate
+  const KEEP_SEC = WINDOW_SEC + 5;
+
+  let samples = [];          // {t, gx,gy,gz}
+  let running = false;
+  let t0 = 0;
+  let rafId = null, updId = null, uiId = null;
+  let lastUpdate = 0;
+  let sawAnyMotion = false;
+  let wakeLock = null;
+
+  function onMotion(e) {
+    sawAnyMotion = true;
+    let a = e.accelerationIncludingGravity;
+    if (!(a && (a.x != null || a.y != null || a.z != null))) a = e.acceleration;
+    if (!a || !running) return;
+    const t = performance.now() / 1000 - t0;
+    samples.push({ t, gx: a.x || 0, gy: a.y || 0, gz: a.z || 0 });
+    // prune old samples to bound memory over long sessions
+    const cutoff = t - KEEP_SEC;
+    if (samples.length > 0 && samples[0].t < cutoff) {
+      let i = 0; while (i < samples.length && samples[i].t < cutoff) i++;
+      if (i > 0) samples.splice(0, i);
+    }
+  }
+
+  // ---------- wake lock ----------
+  async function acquireWakeLock() {
+    if (!("wakeLock" in navigator)) { setWake(false, "not supported"); return; }
+    try {
+      wakeLock = await navigator.wakeLock.request("screen");
+      setWake(true, "screen kept on");
+      wakeLock.addEventListener("release", () => setWake(false, "released"));
+    } catch (err) {
+      setWake(false, "denied");
+    }
+  }
+  function setWake(on, txt) {
+    const d = $("wakeDot");
+    d.className = "dot " + (on ? "on" : "off");
+    $("wakeTxt").textContent = "screen: " + txt;
+  }
+  // Wake lock is dropped when the tab is hidden; re-acquire when it returns.
+  document.addEventListener("visibilitychange", () => {
+    if (running && document.visibilityState === "visible" && !wakeLock) acquireWakeLock();
+    if (document.visibilityState === "hidden") wakeLock = null;
+  });
+
+  // ---------- permission + start ----------
+  async function requestAndStart() {
+    setupErrSet("");
+    lowBpm = clampInt($("lowInput").value, 1, 200, 15);
+    highBpm = clampInt($("highInput").value, 1, 200, 45);
+    if (lowBpm >= highBpm) { setupErrSet("Low alarm must be below high alarm."); return; }
+    saveSettings();
+
+    if (typeof DeviceMotionEvent === "undefined") {
+      setupErrSet("This device/browser does not expose motion sensors. Use Safari on iPhone or Chrome on Android, over HTTPS.");
+      return;
+    }
+    if (typeof DeviceMotionEvent.requestPermission === "function") {
+      let resp;
+      try { resp = await DeviceMotionEvent.requestPermission(); }
+      catch (err) { setupErrSet("Permission request failed — needs HTTPS and a direct tap. (" + err.message + ")"); return; }
+      if (resp !== "granted") { setupErrSet("Motion access not granted. Enable in Settings → Safari → Motion & Orientation Access, then reload."); return; }
+    }
+    begin();
+  }
+  function setupErrSet(t) { $("setupErr").textContent = t; }
+  function clampInt(v, lo, hi, dflt) { const n = parseInt(v, 10); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : dflt; }
+
+  function begin() {
+    samples = []; running = true; sawAnyMotion = false; lastUpdate = 0;
+    t0 = performance.now() / 1000;
+    lastConfident = null; alarmLatched = false;
+    window.addEventListener("devicemotion", onMotion, { passive: true });
+    acquireWakeLock();
+    initAudio();
+    show("monitor");
+    setMonitorState("warming", "Warming up…", "--", "Collecting the first window…", "");
+    drawLoop();
+    updId = setInterval(tick, 1000); // check every second; recompute every UPDATE_SEC
+  }
+
+  function stop() {
+    running = false;
+    window.removeEventListener("devicemotion", onMotion);
+    if (rafId) cancelAnimationFrame(rafId), rafId = null;
+    if (updId) clearInterval(updId), updId = null;
+    if (wakeLock) { try { wakeLock.release(); } catch (e) {} wakeLock = null; }
+    clearFlash();
+  }
+
+  // ---------- rolling tick ----------
+  function tick() {
+    const now = performance.now() / 1000 - t0;
+    const elapsed = now;
+    // live meta
+    const n = samples.length;
+    const span = n > 1 ? samples[n - 1].t - samples[0].t : 0;
+    const fs = span > 0 ? (n - 1) / span : 0;
+    $("rateInfo").textContent = n + " samples • ~" + fs.toFixed(0) + " Hz";
+
+    if (elapsed < MIN_FILL_SEC) {
+      $("updStat").textContent = "first: " + Math.ceil(MIN_FILL_SEC - elapsed) + "s";
+      return;
+    }
+    const sinceUpd = now - lastUpdate;
+    $("updStat").textContent = "next: " + Math.max(0, Math.ceil(UPDATE_SEC - sinceUpd)) + "s";
+    if (lastUpdate === 0 || sinceUpd >= UPDATE_SEC) {
+      lastUpdate = now;
+      recompute();
+    }
+  }
+
+  // ---------- analysis (validated DSP) ----------
+  const BAND_LO = 0.1, BAND_HI = 1.0;
+  function resampleUniform(ts, vals, fsTarget) {
+    const T = ts[ts.length - 1] - ts[0];
+    const n = Math.max(2, Math.floor(T * fsTarget));
+    const dt = T / (n - 1);
+    const out = new Float64Array(n);
+    let j = 0;
+    for (let i = 0; i < n; i++) {
+      const tt = ts[0] + i * dt;
+      while (j < ts.length - 2 && ts[j + 1] < tt) j++;
+      const t1 = ts[j], t2 = ts[j + 1];
+      const f = t2 > t1 ? (tt - t1) / (t2 - t1) : 0;
+      out[i] = vals[j] * (1 - f) + vals[j + 1] * f;
+    }
+    return { data: out, dt, fs: 1 / dt };
+  }
+  function detrend(x) {
+    const n = x.length; let sx = 0, sy = 0, sxx = 0, sxy = 0;
+    for (let i = 0; i < n; i++) { sx += i; sy += x[i]; sxx += i * i; sxy += i * x[i]; }
+    const d = n * sxx - sx * sx;
+    const slope = d !== 0 ? (n * sxy - sx * sy) / d : 0;
+    const intercept = (sy - slope * sx) / n;
+    const out = new Float64Array(n);
+    for (let i = 0; i < n; i++) out[i] = x[i] - (slope * i + intercept);
+    return out;
+  }
+  function hann(x) { const n = x.length, o = new Float64Array(n); for (let i = 0; i < n; i++) o[i] = x[i] * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / (n - 1))); return o; }
+  function fft(re, im) {
+    const n = re.length;
+    for (let i = 1, j = 0; i < n; i++) { let bit = n >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit; if (i < j) { [re[i], re[j]] = [re[j], re[i]];[im[i], im[j]] = [im[j], im[i]]; } }
+    for (let len = 2; len <= n; len <<= 1) {
+      const ang = -2 * Math.PI / len, wr = Math.cos(ang), wi = Math.sin(ang);
+      for (let i = 0; i < n; i += len) {
+        let cr = 1, ci = 0;
+        for (let k = 0; k < len / 2; k++) {
+          const ur = re[i + k], ui = im[i + k];
+          const vr = re[i + k + len / 2] * cr - im[i + k + len / 2] * ci;
+          const vi = re[i + k + len / 2] * ci + im[i + k + len / 2] * cr;
+          re[i + k] = ur + vr; im[i + k] = ui + vi;
+          re[i + k + len / 2] = ur - vr; im[i + k + len / 2] = ui - vi;
+          const ncr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = ncr;
+        }
+      }
+    }
+  }
+  function nextPow2(n) { let p = 1; while (p < n) p <<= 1; return p; }
+  function spectralEstimate(sig, fs) {
+    const w = hann(detrend(sig)); const N = nextPow2(w.length);
+    const re = new Float64Array(N), im = new Float64Array(N);
+    for (let i = 0; i < w.length; i++) re[i] = w[i];
+    fft(re, im);
+    const half = N >> 1; const freqs = new Float64Array(half), power = new Float64Array(half);
+    for (let i = 0; i < half; i++) { freqs[i] = i * fs / N; power[i] = re[i] * re[i] + im[i] * im[i]; }
+    let peakI = -1, peakP = -1; const bandP = [];
+    for (let i = 0; i < half; i++) if (freqs[i] >= BAND_LO && freqs[i] <= BAND_HI) { bandP.push(power[i]); if (power[i] > peakP) { peakP = power[i]; peakI = i; } }
+    if (peakI < 0) return null;
+    let fPeak = freqs[peakI];
+    if (peakI > 0 && peakI < half - 1) {
+      const a = power[peakI - 1], b = power[peakI], c = power[peakI + 1], den = a - 2 * b + c;
+      if (den !== 0) fPeak = (peakI + 0.5 * (a - c) / den) * fs / N;
+    }
+    const sorted = bandP.slice().sort((x, y) => x - y);
+    const median = sorted[Math.floor(sorted.length / 2)] || 1e-9;
+    return { freq: fPeak, bpm: fPeak * 60, prominence: peakP / (median || 1e-9) };
+  }
+  function autocorrBpm(sig, fs) {
+    const x = detrend(sig); const n = x.length;
+    const minLag = Math.floor(fs / BAND_HI), maxLag = Math.floor(fs / BAND_LO);
+    let bestLag = -1, bestVal = -Infinity, norm = 0;
+    for (let i = 0; i < n; i++) norm += x[i] * x[i];
+    if (norm <= 0) return null;
+    for (let lag = minLag; lag <= Math.min(maxLag, n - 1); lag++) {
+      let s = 0; for (let i = 0; i + lag < n; i++) s += x[i] * x[i + lag];
+      const v = s / norm; if (v > bestVal) { bestVal = v; bestLag = lag; }
+    }
+    if (bestLag <= 0) return null;
+    return { bpm: fs / bestLag * 60, strength: bestVal };
+  }
+
+  let lastConfident = null;   // {bpm, ts}
+  let alarmLatched = false;
+
+  function recompute() {
+    const now = performance.now() / 1000 - t0;
+    const win = samples.filter(s => s.t >= now - WINDOW_SEC);
+    if (win.length < 20) { applyState("uncertain", null, "Signal uncertain", "Not enough motion data — hold the phone still."); return; }
+    const ts = win.map(s => s.t);
+    const span = ts[ts.length - 1] - ts[0];
+    const rawFs = (win.length - 1) / span;
+    const fsTarget = Math.min(25, Math.max(8, rawFs));
+
+    let best = null, bestSig = null, bestAxis = "", bestFs = 0;
+    for (const ax of ["gx", "gy", "gz"]) {
+      const { data, fs } = resampleUniform(ts, win.map(s => s[ax]), fsTarget);
+      // guard against a totally flat axis (sensor stall)
+      let mn = Infinity, mx = -Infinity; for (const v of data) { if (v < mn) mn = v; if (v > mx) mx = v; }
+      if (mx - mn < 1e-4) continue;
+      const est = spectralEstimate(data, fs);
+      if (est && (!best || est.prominence > best.prominence)) { best = est; bestSig = data; bestAxis = ax; bestFs = fs; }
+    }
+    $("axisStat").textContent = "axis: " + (best ? bestAxis.replace("g", "") : "—");
+
+    if (!best) { applyState("uncertain", null, "Signal uncertain", "No breathing-like motion detected (signal may be lost)."); return; }
+
+    const ac = autocorrBpm(bestSig, bestFs);
+    const cycles = best.freq * span;
+    const agree = ac ? Math.abs(ac.bpm - best.bpm) <= 3 : false;
+
+    // confidence tiers
+    let conf = "low";
+    if (best.prominence >= 8 && cycles >= 4 && agree) conf = "high";
+    else if (best.prominence >= 3.5 && cycles >= 3 && agree) conf = "medium";
+    $("confStat").textContent = "conf: " + conf + " (" + best.prominence.toFixed(1) + "×)";
+
+    const bpm = Math.round(best.bpm);
+
+    // --- the key safety rule ---
+    // Only a MEDIUM+ confidence reading may drive OK / alarm. A LOW-confidence reading
+    // (motion artifacts, child shifting, weak/absent signal) shows "Signal uncertain" and
+    // NEVER fires the red alarm — a garbage reading must not look like real brady/tachypnea.
+    if (conf === "low") {
+      applyState("uncertain", bpm, "Signal uncertain", "Weak or noisy signal — reading not trusted. Keep the phone still.");
+      return;
+    }
+
+    lastConfident = { bpm, ts: now };
+    if (bpm < lowBpm) applyState("alarm", bpm, "Rate LOW", "Below your low alarm of " + lowBpm + " bpm.");
+    else if (bpm > highBpm) applyState("alarm", bpm, "Rate HIGH", "Above your high alarm of " + highBpm + " bpm.");
+    else applyState("ok", bpm, "In range", "Confident reading within your set range.");
+  }
+
+  // ---------- state + visuals ----------
+  function setMonitorState(cls, label, bpm, sub, range) {
+    const m = $("monitor");
+    m.className = "card monitor " + cls;
+    $("stateLabel").textContent = label;
+    $("bpmVal").textContent = bpm;
+    $("subState").textContent = sub;
+    $("rangeLine").textContent = range;
+  }
+  function applyState(cls, bpm, label, sub) {
+    const shown = bpm == null ? "--" : bpm;
+    const range = "alarm range: < " + lowBpm + " or > " + highBpm + " bpm";
+    setMonitorState(cls, label, shown, sub, range);
+    if (cls === "alarm") startFlash(label); else clearFlash();
+  }
+
+  function startFlash(label) {
+    $("flash").classList.add("alarm");
+    const fm = $("flashmsg");
+    fm.textContent = label === "Rate HIGH" ? "RATE HIGH" : "RATE LOW";
+    fm.classList.remove("hidden");
+    if (!alarmLatched) { alarmLatched = true; beep(); }
+  }
+  function clearFlash() {
+    $("flash").classList.remove("alarm");
+    $("flashmsg").classList.add("hidden");
+    alarmLatched = false;
+  }
+
+  // ---------- optional beep ----------
+  let audioCtx = null, beepTimer = null;
+  function initAudio() {
+    if (!$("soundToggle").checked) return;
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { audioCtx = null; }
+  }
+  function beep() {
+    if (!$("soundToggle").checked || !audioCtx) return;
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    const doBeep = () => {
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.frequency.value = 880; o.type = "sine";
+      g.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.25, audioCtx.currentTime + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.25);
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(); o.stop(audioCtx.currentTime + 0.26);
+    };
+    doBeep();
+    if (beepTimer) clearInterval(beepTimer);
+    beepTimer = setInterval(() => { if (alarmLatched && $("flash").classList.contains("alarm")) doBeep(); else { clearInterval(beepTimer); beepTimer = null; } }, 1400);
+  }
+
+  // ---------- live waveform ----------
+  function sizeCanvas(c) { const dpr = window.devicePixelRatio || 1; const r = c.getBoundingClientRect(); c.width = Math.max(1, Math.floor(r.width * dpr)); c.height = Math.max(1, Math.floor(r.height * dpr)); }
+  function plot(ctx, W, H, sig) {
+    let mn = Infinity, mx = -Infinity; for (const v of sig) { if (v < mn) mn = v; if (v > mx) mx = v; }
+    const rng = (mx - mn) || 1;
+    ctx.strokeStyle = "#5cc8ff"; ctx.lineWidth = 2; ctx.beginPath();
+    for (let i = 0; i < sig.length; i++) { const x = i / (sig.length - 1) * W; const y = H - (sig[i] - mn) / rng * (H - 18) - 9; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,255,0.08)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
+  }
+  function drawLoop() {
+    const cv = $("wave"); sizeCanvas(cv); const ctx = cv.getContext("2d"); const W = cv.width, H = cv.height;
+    const render = () => {
+      ctx.clearRect(0, 0, W, H);
+      const now = performance.now() / 1000 - t0;
+      const recent = samples.filter(s => s.t >= now - 15);
+      if (recent.length > 4) {
+        let bestAx = "gz", bestVar = -1;
+        for (const ax of ["gx", "gy", "gz"]) {
+          const vals = recent.map(s => s[ax]); const m = vals.reduce((a, b) => a + b, 0) / vals.length;
+          const v = vals.reduce((a, b) => a + (b - m) * (b - m), 0) / vals.length;
+          if (v > bestVar) { bestVar = v; bestAx = ax; }
+        }
+        plot(ctx, W, H, detrend(recent.map(s => s[bestAx])));
+      }
+      rafId = requestAnimationFrame(render);
+    };
+    render();
+  }
+
+  // ---------- manual count ----------
+  let taps = [];
+  function tapBreath() { taps.push(performance.now() / 1000); if (taps.length > 60) taps.shift(); updManual(); }
+  function updManual() {
+    const n = taps.length;
+    if (n < 2) { $("tapRate").innerHTML = '-- <small style="font-size:1rem;color:var(--muted)">bpm</small>'; $("tapInfo").textContent = n + " breaths • 0.0 s"; return; }
+    const span = taps[n - 1] - taps[0]; const bpm = (n - 1) / span * 60;
+    $("tapRate").innerHTML = Math.round(bpm) + ' <small style="font-size:1rem;color:var(--muted)">bpm</small>';
+    $("tapInfo").textContent = n + " breaths • " + span.toFixed(1) + " s";
+  }
+
+  // ---------- wiring ----------
+  $("startBtn").addEventListener("click", requestAndStart);
+  $("stopBtn").addEventListener("click", () => { stop(); show("setup"); });
+  $("manualBtn").addEventListener("click", () => { show("manual"); });
+  $("tapBtn").addEventListener("click", tapBreath);
+  $("tapResetBtn").addEventListener("click", () => { taps = []; updManual(); });
+  $("tapDoneBtn").addEventListener("click", () => { show(running ? "monitor" : "setup"); });
+
+  loadSettings();
+  show("setup");
+})();
+</script>
+</body>
+</html>
